@@ -10,6 +10,9 @@
    conda create -n MinerU python=3.10
    conda activate MinerU
    python3 -m pip install -r requirements.txt
+   # 如果您还没有下载模型权重文件，请先下载
+   wget https://github.com/opendatalab/MinerU/raw/master/scripts/download_models_hf.py -O download_models_hf.py
+   python3 download_models_hf.py
    ```
 
 3. 启动程序：

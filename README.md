@@ -10,6 +10,9 @@ A simple [MinerU](https://github.com/opendatalab/MinerU) frontend.
      conda create -n MinerU python=3.10
      conda activate MinerU
      python3 -m pip install -r requirements.txt
+     # Download model weight files if you haven't already
+     wget https://github.com/opendatalab/MinerU/raw/master/scripts/download_models_hf.py -O download_models_hf.py
+     python3 download_models_hf.py
    ```
 4. Start the program
    ```bash
