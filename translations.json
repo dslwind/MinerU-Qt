@@ -72,11 +72,11 @@
             "en": "Success",
             "zh": "成功"
         },
-        "canceled": {
-            "en": "Canceled",
+        "cancelled": {
+            "en": "Cancelled",
             "zh": "已取消"
         },
-        "canceling": {
+        "cancelling": {
             "en": "Cancelling...",
             "zh": "正在取消..."
         }
@@ -112,6 +112,14 @@
             "en": "Output directory '{dir}' already exists and may contain previous results.\nDo you want to overwrite it?",
             "zh": "输出目录 '{dir}' 已存在且可能包含之前的结果。\n是否要覆盖它？"
         },
+        "cancel_title": {
+            "en": "Cleanup Directory",
+            "zh": "清理目录"
+        },
+        "cancel_message": {
+            "en": "Do you want to remove the partially processed directory?\n{md_dir}",
+            "zh": "是否删除部分处理的目录？\n{md_dir}"
+        },
         "remove_error": {
             "en": "Failed to remove existing directory '{dir}'. {error}",
             "zh": "无法删除现有目录 '{dir}'。{error}"
@@ -119,6 +127,10 @@
         "process_error": {
             "en": "Error: {msg}",
             "zh": "错误: {msg}"
+        },
+        "cancel_success": {
+            "en": "PDF conversion cancelled by user!",
+            "zh": "PDF转换已被用户取消"
         },
         "cleanup_dir": {
             "en": "Cleaned up directory: {dir}",
@@ -135,16 +147,16 @@
             "zh": "查找magic-pdf进程时出错：{error}"
         },
         "found_process": {
-            "en": "Found magic-pdf process: {pid}",
-            "zh": "找到magic-pdf进程：{pid}"
+            "en": "PDF conversion has started - PID:{pid}",
+            "zh": "PDF转换已开始 - PID:{pid}"
         },
         "process_warning": {
             "en": "Warning: Could not find magic-pdf process",
             "zh": "警告：无法找到magic-pdf进程"
         },
         "user_cancel": {
-            "en": "Process canceled by user",
-            "zh": "用户取消进程"
+            "en": "PDF conversion cancelled by user!",
+            "zh": "PDF转换已被用户取消"
         },
         "process_success": {
             "en": "Success!",

@@ -226,6 +226,7 @@ class MinerUGUI(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle(self.tm.get_text("window", "title"))
+
         self.setGeometry(100, 100, 800, 600)
 
         central_widget = QWidget()
@@ -396,7 +397,7 @@ class MinerUGUI(QMainWindow):
         if hasattr(self, 'runner') and self.runner.isRunning():
             self.cancel_requested = True
             self.runner.stop()
-            self.status_label.setText(self.tm.get_text("status", "canceling"))
+            self.status_label.setText(self.tm.get_text("status", "cancelling"))
 
     def update_progress(self, message):
         self.output_log.appendPlainText(message)
@@ -410,25 +411,34 @@ class MinerUGUI(QMainWindow):
             self.status_label.setText(self.tm.get_text("status", "success"))
         else:
             if self.cancel_requested:
-                self.status_label.setText(self.tm.get_text("status", "canceled"))
+                self.status_label.setText(self.tm.get_text("status", "cancelled"))
+                self.output_log.appendPlainText(
+                    self.tm.get_text("messages", "cancel_success")
+                )
+                # Ask user about cleanup
+                pdf_name = os.path.splitext(os.path.basename(self.input_path.text()))[0]
+                output_dir = self.output_path.text()
+                md_dir = os.path.join(output_dir, pdf_name)
+                if os.path.exists(md_dir):
+                    reply = QMessageBox.question(
+                        self,
+                        self.tm.get_text("messages", "cancel_title"),
+                        self.tm.get_text("messages", "cancel_message", md_dir=md_dir),
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    if reply == QMessageBox.StandardButton.Yes:
+                        try:
+                            shutil.rmtree(md_dir)
+                            self.output_log.appendPlainText(
+                                self.tm.get_text("messages", "cleanup_dir", dir=md_dir)
+                            )
+                        except Exception as e:
+                            self.output_log.appendPlainText(
+                                self.tm.get_text("messages", "cleanup_error", dir=md_dir, error=str(e))
+                            )
             else:
-                self.status_label.setText(self.tm.get_text("messages", "process_error", msg=message))
-
-        if self.cancel_requested:
-            pdf_name = os.path.splitext(os.path.basename(self.input_path.text()))[0]
-            output_dir = self.output_path.text()
-            md_dir = os.path.join(output_dir, pdf_name)
-            if os.path.exists(md_dir):
-                try:
-                    shutil.rmtree(md_dir)
-                    self.output_log.appendPlainText(
-                        self.tm.get_text("messages", "cleanup_dir", dir=md_dir)
-                    )
-                except Exception as e:
-                    self.output_log.appendPlainText(
-                        self.tm.get_text("messages", "cleanup_error", dir=md_dir, error=str(e))
-                    )
-
+                self.status_label.setText("Error: " + message)
 def main():
     app = QApplication(sys.argv)
     window = MinerUGUI()
