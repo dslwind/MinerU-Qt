@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import psutil
 import sys
 import os
 import json
@@ -14,7 +15,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QComboBox, QSpinBox,
     QCheckBox, QLineEdit, QProgressBar, QMessageBox, QPlainTextEdit
 )
-from PyQt6.QtCore import QThread, QLocale, pyqtSignal
+from PyQt6.QtCore import QThread, QLocale, pyqtSignal, QUrl
 
 class TranslationManager:
     _instance = None
@@ -122,8 +123,10 @@ class CommandRunner(QThread):
             else:
                 self.progress.emit(self.tm.get_text("process_messages", "process_warning"))
 
+            # Main loop to read the process output
             while True:
                 if self.should_terminate:
+                    # Process termination is now done in stop(), but we ensure here too.
                     self._terminate_process()
                     self.finished.emit(False, self.tm.get_text("process_messages", "user_cancel"))
                     return
@@ -153,53 +156,48 @@ class CommandRunner(QThread):
             self._cleanup()
 
     def stop(self):
+        # Immediately signal that termination is requested
         self.should_terminate = True
+        # Immediately attempt to terminate the process to make cancel behavior stronger
+        self._terminate_process()
 
     def _terminate_process(self):
         try:
             import psutil
             if self.child_pid:
                 try:
-                    process = psutil.Process(self.child_pid)
-                    children = process.children(recursive=True)
+                    # Get process and all children
+                    parent = psutil.Process(self.child_pid)
+                    children = parent.children(recursive=True)
 
-                    process.terminate()
-
-                    try:
-                        process.wait(timeout=3)
-                    except psutil.TimeoutExpired:
-                        process.kill()
-
+                    # Kill all child processes first
                     for child in children:
                         try:
-                            child.terminate()
-                            try:
-                                child.wait(timeout=1)
-                            except psutil.TimeoutExpired:
-                                child.kill()
+                            child.kill()
                         except psutil.NoSuchProcess:
                             pass
+
+                    # Kill parent process
+                    parent.kill()
 
                 except psutil.NoSuchProcess:
                     self.progress.emit(self.tm.get_text("process_messages", "already_terminated"))
                 except Exception as e:
                     self.progress.emit(self.tm.get_text("process_messages", "termination_error", error=str(e)))
 
+            # Kill the shell process if it still exists
             if self.process and self.process.poll() is None:
-                self.process.terminate()
-                time.sleep(0.5)
-                if self.process.poll() is None:
-                    self.process.kill()
+                self.process.kill()
 
         except ImportError:
             self.progress.emit(self.tm.get_text("process_messages", "psutil_missing"))
             if self.child_pid:
                 try:
                     if self.is_windows:
-                        subprocess.run(['taskkill', '/F', '/PID', str(self.child_pid)],
+                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.child_pid)],
                                      capture_output=True)
                     else:
-                        os.kill(self.child_pid, signal.SIGTERM)
+                        os.killpg(os.getpgid(self.child_pid), signal.SIGKILL)
                 except Exception as e:
                     self.progress.emit(self.tm.get_text("process_messages", "fallback_error", error=str(e)))
 
@@ -229,9 +227,13 @@ class MinerUGUI(QMainWindow):
 
         self.setGeometry(100, 100, 800, 600)
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        # Create main layout as horizontal split
+        main_layout = QHBoxLayout()
+
+        # Left panel for existing controls
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        # Move all existing widgets to left_layout
 
         # Input file/directory selection
         input_layout = QHBoxLayout()
@@ -241,7 +243,7 @@ class MinerUGUI(QMainWindow):
         input_layout.addWidget(QLabel(self.tm.get_text("labels", "input_path")))
         input_layout.addWidget(self.input_path)
         input_layout.addWidget(input_btn)
-        layout.addLayout(input_layout)
+        left_layout.addLayout(input_layout)
 
         # Output directory selection
         output_layout = QHBoxLayout()
@@ -251,7 +253,7 @@ class MinerUGUI(QMainWindow):
         output_layout.addWidget(QLabel(self.tm.get_text("labels", "output_dir")))
         output_layout.addWidget(self.output_path)
         output_layout.addWidget(output_btn)
-        layout.addLayout(output_layout)
+        left_layout.addLayout(output_layout)
 
         # Method selection
         method_layout = QHBoxLayout()
@@ -259,7 +261,7 @@ class MinerUGUI(QMainWindow):
         self.method_combo.addItems(['auto', 'ocr', 'txt'])
         method_layout.addWidget(QLabel(self.tm.get_text("labels", "method")))
         method_layout.addWidget(self.method_combo)
-        layout.addLayout(method_layout)
+        left_layout.addLayout(method_layout)
 
         # Language selection
         lang_layout = QHBoxLayout()
@@ -267,7 +269,7 @@ class MinerUGUI(QMainWindow):
         self.lang_input.setPlaceholderText(self.tm.get_text("placeholders", "language_input"))
         lang_layout.addWidget(QLabel(self.tm.get_text("labels", "language")))
         lang_layout.addWidget(self.lang_input)
-        layout.addLayout(lang_layout)
+        left_layout.addLayout(lang_layout)
 
         # Page range
         page_layout = QHBoxLayout()
@@ -279,30 +281,30 @@ class MinerUGUI(QMainWindow):
         page_layout.addWidget(self.start_page)
         page_layout.addWidget(QLabel(self.tm.get_text("labels", "end_page")))
         page_layout.addWidget(self.end_page)
-        layout.addLayout(page_layout)
+        left_layout.addLayout(page_layout)
 
         # Debug mode
         debug_layout = QHBoxLayout()
         self.debug_check = QCheckBox(self.tm.get_text("labels", "debug_mode"))
         debug_layout.addWidget(self.debug_check)
-        layout.addLayout(debug_layout)
+        left_layout.addLayout(debug_layout)
 
         # Progress bar and status
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
-        layout.addWidget(self.progress_bar)
+        left_layout.addWidget(self.progress_bar)
 
         self.status_label = QLabel(self.tm.get_text("status", "ready"))
         status_label_font = self.status_label.font()
         status_label_font.setBold(True)
         self.status_label.setFont(status_label_font)
-        layout.addWidget(self.status_label)
+        left_layout.addWidget(self.status_label)
 
         # Output log
         self.output_log = QPlainTextEdit()
         self.output_log.setReadOnly(True)
         self.output_log.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        layout.addWidget(self.output_log)
+        left_layout.addWidget(self.output_log)
 
         # Process and Cancel Buttons
         btn_layout = QHBoxLayout()
@@ -313,7 +315,22 @@ class MinerUGUI(QMainWindow):
         self.cancel_btn.setEnabled(False)
         btn_layout.addWidget(self.process_btn)
         btn_layout.addWidget(self.cancel_btn)
-        layout.addLayout(btn_layout)
+        left_layout.addLayout(btn_layout)
+
+
+        # Right panel for markdown preview (hidden initially)
+        self.preview_panel = QPlainTextEdit()
+        self.preview_panel.setReadOnly(True)
+        self.preview_panel.hide()  # Hidden by default
+
+        # Add panels to main layout
+        main_layout.addWidget(left_panel)
+        main_layout.addWidget(self.preview_panel, stretch=1)
+
+        # Set main layout
+        central_widget = QWidget()
+        central_widget.setLayout(main_layout)
+        self.setCentralWidget(central_widget)
 
     def select_pdf(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -324,6 +341,8 @@ class MinerUGUI(QMainWindow):
         )
         if path:
             self.input_path.setText(path)
+            self.preview_panel.setPlainText("")
+            self.preview_panel.hide()
 
     def select_output(self):
         path = QFileDialog.getExistingDirectory(
@@ -352,20 +371,10 @@ class MinerUGUI(QMainWindow):
                 self.tm.get_text("messages", "overwrite_title"),
                 self.tm.get_text("messages", "overwrite_message", dir=md_dir),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                QMessageBox.StandardButton.Yes
             )
             if reply == QMessageBox.StandardButton.No:
                 return
-            else:
-                try:
-                    shutil.rmtree(md_dir)
-                except Exception as e:
-                    QMessageBox.warning(
-                        self,
-                        self.tm.get_text("messages", "error"),
-                        self.tm.get_text("messages", "remove_error", dir=md_dir, error=str(e))
-                    )
-                    return
 
         cmd = f'magic-pdf -p "{self.input_path.text()}" -o "{self.output_path.text()}" -m {self.method_combo.currentText()}'
 
@@ -409,6 +418,22 @@ class MinerUGUI(QMainWindow):
 
         if success:
             self.status_label.setText(self.tm.get_text("status", "success"))
+            pdf_name = os.path.splitext(os.path.basename(self.input_path.text()))[0]
+            md_path = os.path.join(self.output_path.text(), pdf_name, self.method_combo.currentText(), pdf_name + ".md")
+            self.output_log.appendPlainText(
+                self.tm.get_text("messages", "successful_md_path", md_path=md_path)
+            )
+            # Show markdown preview after successful conversion
+            try:
+                if os.path.exists(md_path):
+                    with open(md_path, 'r', encoding='utf-8') as f:
+                        markdown_content = f.read()
+                        self.preview_panel.setPlainText(markdown_content)
+                        self.preview_panel.show()  # Show the preview panel
+            except Exception as e:
+                self.output_log.appendPlainText(
+                    self.tm.get_text("messages", "preview_error", error=str(e))
+                )
         else:
             if self.cancel_requested:
                 self.status_label.setText(self.tm.get_text("status", "cancelled"))
@@ -425,7 +450,7 @@ class MinerUGUI(QMainWindow):
                         self.tm.get_text("messages", "cancel_title"),
                         self.tm.get_text("messages", "cancel_message", md_dir=md_dir),
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.No
+                        QMessageBox.StandardButton.Yes
                     )
                     if reply == QMessageBox.StandardButton.Yes:
                         try:

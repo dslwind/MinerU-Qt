@@ -139,6 +139,10 @@
         "cleanup_error": {
             "en": "Failed to remove directory {dir}: {error}",
             "zh": "无法删除目录 {dir}：{error}"
+        },
+        "successful_md_path": {
+            "en": "PDF conversion successful: {md_path}",
+            "zh": "PDF转换成功：{md_path}"
         }
     },
     "process_messages": {
