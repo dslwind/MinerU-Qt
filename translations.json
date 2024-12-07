@@ -1,0 +1,178 @@
+{
+    "window": {
+        "title": {
+            "en": "MinerU - A high-quality tool for convert PDF to Markdown and JSON",
+            "zh": "MinerU - 一站式开源高质量数据提取工具，将PDF转换成Markdown和JSON格式"
+        }
+    },
+    "buttons": {
+        "select_pdf": {
+            "en": "Select Input PDF",
+            "zh": "选择输入PDF"
+        },
+        "select_output": {
+            "en": "Select Output DIR",
+            "zh": "选择输出目录"
+        },
+        "process_pdf": {
+            "en": "Convert PDF",
+            "zh": "转换PDF"
+        },
+        "cancel": {
+            "en": "Cancel",
+            "zh": "取消"
+        }
+    },
+    "labels": {
+        "input_path": {
+            "en": "Input Path:",
+            "zh": "输入路径:"
+        },
+        "output_dir": {
+            "en": "Output Directory:",
+            "zh": "输出目录:"
+        },
+        "method": {
+            "en": "Method:",
+            "zh": "处理方法:"
+        },
+        "language": {
+            "en": "Language (optional):",
+            "zh": "语言（可选）:"
+        },
+        "start_page": {
+            "en": "Start Page:",
+            "zh": "起始页:"
+        },
+        "end_page": {
+            "en": "End Page:",
+            "zh": "结束页:"
+        },
+        "debug_mode": {
+            "en": "Debug Mode",
+            "zh": "调试模式"
+        }
+    },
+    "placeholders": {
+        "language_input": {
+            "en": "e.g., en, ch, jp...",
+            "zh": "例如：en, ch, jp..."
+        }
+    },
+    "status": {
+        "ready": {
+            "en": "Ready",
+            "zh": "就绪"
+        },
+        "processing": {
+            "en": "Processing...",
+            "zh": "处理中..."
+        },
+        "success": {
+            "en": "Success",
+            "zh": "成功"
+        },
+        "canceled": {
+            "en": "Canceled",
+            "zh": "已取消"
+        },
+        "canceling": {
+            "en": "Cancelling...",
+            "zh": "正在取消..."
+        }
+    },
+    "dialogs": {
+        "select_pdf": {
+            "en": "Select PDF File",
+            "zh": "选择PDF文件"
+        },
+        "select_output_dir": {
+            "en": "Select Output Directory",
+            "zh": "选择输出目录"
+        },
+        "pdf_filter": {
+            "en": "PDF Files (*.pdf)",
+            "zh": "PDF文件 (*.pdf)"
+        }
+    },
+    "messages": {
+        "error": {
+            "en": "Error",
+            "zh": "错误"
+        },
+        "select_paths": {
+            "en": "Please select input and output paths",
+            "zh": "请选择输入和输出路径"
+        },
+        "overwrite_title": {
+            "en": "Overwrite Existing Output",
+            "zh": "覆盖现有输出"
+        },
+        "overwrite_message": {
+            "en": "Output directory '{dir}' already exists and may contain previous results.\nDo you want to overwrite it?",
+            "zh": "输出目录 '{dir}' 已存在且可能包含之前的结果。\n是否要覆盖它？"
+        },
+        "remove_error": {
+            "en": "Failed to remove existing directory '{dir}'. {error}",
+            "zh": "无法删除现有目录 '{dir}'。{error}"
+        },
+        "process_error": {
+            "en": "Error: {msg}",
+            "zh": "错误: {msg}"
+        },
+        "cleanup_dir": {
+            "en": "Cleaned up directory: {dir}",
+            "zh": "清理目录：{dir}"
+        },
+        "cleanup_error": {
+            "en": "Failed to remove directory {dir}: {error}",
+            "zh": "无法删除目录 {dir}：{error}"
+        }
+    },
+    "process_messages": {
+        "find_process_error": {
+            "en": "Error finding magic-pdf process: {error}",
+            "zh": "查找magic-pdf进程时出错：{error}"
+        },
+        "found_process": {
+            "en": "Found magic-pdf process: {pid}",
+            "zh": "找到magic-pdf进程：{pid}"
+        },
+        "process_warning": {
+            "en": "Warning: Could not find magic-pdf process",
+            "zh": "警告：无法找到magic-pdf进程"
+        },
+        "user_cancel": {
+            "en": "Process canceled by user",
+            "zh": "用户取消进程"
+        },
+        "process_success": {
+            "en": "Success!",
+            "zh": "处理成功！"
+        },
+        "stderr_prefix": {
+            "en": "[stderr]: ",
+            "zh": "[错误输出]: "
+        },
+        "process_error": {
+            "en": "Error encountered. See log for details.",
+            "zh": "遇到错误。请查看日志了解详情。"
+        },
+        "already_terminated": {
+            "en": "Process already terminated",
+            "zh": "进程已终止"
+        },
+        "termination_error": {
+            "en": "Error terminating magic-pdf process: {error}",
+            "zh": "终止magic-pdf进程时出错：{error}"
+        },
+        "psutil_missing": {
+            "en": "psutil not installed. Using fallback termination method.",
+            "zh": "未安装psutil。使用备用终止方法。"
+        },
+        "fallback_error": {
+            "en": "Error in fallback termination: {error}",
+            "zh": "备用终止方法出错：{error}"
+        }
+    }
+}
