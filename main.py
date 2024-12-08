@@ -341,8 +341,10 @@ class MinerUGUI(QMainWindow):
         )
         if path:
             self.input_path.setText(path)
+            self.output_log.setPlainText("")
             self.preview_panel.setPlainText("")
             self.preview_panel.hide()
+            self.status_label.setText(self.tm.get_text("status", "ready"))
 
     def select_output(self):
         path = QFileDialog.getExistingDirectory(
