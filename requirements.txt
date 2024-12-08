@@ -2,3 +2,4 @@ magic-pdf[full] --extra-index-url https://wheels.myhloli.com
 psutil
 huggingface_hub
 PyQt6
+loguru

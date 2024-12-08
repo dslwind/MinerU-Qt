@@ -1,7 +1,7 @@
 [English](./README.md) | 简体中文
 
 <p align="center">
-  <img style='height: auto; width: 50%; object-fit: contain' src="./MinerU-GUI.jpg">
+  <img style='height: auto; width: 50%; object-fit: contain' src="./MinerU-GUI.png">
   <br>MinerU-GUI, 一个简单的 MinerU 前端界面。
 </p>
 

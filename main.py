@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 
-import psutil
 import sys
 import os
 import json
-import platform
-import subprocess
 import shutil
-import time
-import signal
-from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QComboBox, QSpinBox,
     QCheckBox, QLineEdit, QProgressBar, QMessageBox, QPlainTextEdit
 )
-from PyQt6.QtCore import QThread, QLocale, pyqtSignal, QUrl
+from PyQt6.QtCore import QThread, QLocale, pyqtSignal
+from magic_pdf.data.data_reader_writer import FileBasedDataWriter, FileBasedDataReader
+from magic_pdf.config.make_content_config import DropMode, MakeMode
+from magic_pdf.pipe.UNIPipe import UNIPipe
+from magic_pdf.pipe.OCRPipe import OCRPipe
+from magic_pdf.pipe.TXTPipe import TXTPipe
+from loguru import logger
+from detectron2.utils.logger import setup_logger
+import logging
 
 class TranslationManager:
     _instance = None
@@ -56,158 +58,164 @@ class TranslationManager:
             print(f"Translation error for {category}.{key}: {e}")
         return f"{category}.{key}"
 
+class SignalHandler(logging.Handler):
+    """Custom handler to forward standard logging messages to Qt signal"""
+    def __init__(self, signal_callback):
+        super().__init__()
+        self.signal_callback = signal_callback
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.signal_callback(msg)
+        except Exception:
+            self.handleError(record)
+
 class CommandRunner(QThread):
     finished = pyqtSignal(bool, str)
     progress = pyqtSignal(str)
 
-    def __init__(self, conda_env, command):
+    def __init__(self, pdf_path, output_path, method, lang, start_page, end_page, debug):
         super().__init__()
-        self.conda_env = conda_env
-        self.command = command
-        self.is_windows = platform.system() == "Windows"
-        self.should_terminate = False
-        self.process = None
-        self.child_pid = None
+        self.pdf_path = pdf_path
+        self.output_path = output_path
+        self.method = method
+        self.lang = lang
+        self.start_page = start_page
+        self.end_page = end_page
+        self.debug = debug
         self.tm = TranslationManager()
+        # Setup logging handlers
+        # 1. Loguru sink
+        self.logger_id = logger.add(self._log_sink, level="INFO")
 
-    def _find_magic_pdf_process(self):
+        # 2. Standard logging handler
+        self.log_handler = SignalHandler(self._log_sink)
+        self.log_handler.setFormatter(logging.Formatter('%(message)s'))
+        self.log_handler.setLevel(logging.INFO)
+        logging.getLogger().addHandler(self.log_handler)
+        self.original_log_level = logging.getLogger().getEffectiveLevel()
+        logging.getLogger().setLevel(logging.INFO)
+
+        # 3. Setup detectron2 logger with signal handler
+        self.detectron_logger = setup_logger(
+            output=None,  # No file output needed
+            distributed_rank=0,
+            name="detectron2",
+            color=False  # Disable colors for GUI output
+        )
+        self.detectron_logger.addHandler(self.log_handler)
+
+    def _log_sink(self, message):
+        """Common sink for both loguru and standard logging"""
+        # For loguru messages
+        if hasattr(message, 'record'):
+            self.progress.emit(message.record["message"])
+        # For standard logging messages
+        else:
+            self.progress.emit(str(message))
+
+    def _cleanup_logging(self):
+        """Clean up all logging handlers"""
         try:
-            import psutil
-            parent = psutil.Process(self.process.pid)
-            children = parent.children(recursive=True)
-            for child in children:
-                try:
-                    cmdline = " ".join(child.cmdline()).lower()
-                    if 'magic-pdf' in cmdline:
-                        return child.pid
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            return None
+            # Remove loguru sink
+            logger.remove(self.logger_id)
+
+            # Remove standard logging handler and restore original level
+            root_logger = logging.getLogger()
+            root_logger.removeHandler(self.log_handler)
+            root_logger.setLevel(self.original_log_level)
+
+            # Remove handler from detectron2 logger
+            self.detectron_logger.removeHandler(self.log_handler)
+
         except Exception as e:
-            self.progress.emit(self.tm.get_text("process_messages", "find_process_error", error=str(e)))
-            return None
+            print(f"Error cleaning up logging: {e}")
 
     def run(self):
+        self.progress.emit(self.tm.get_text("process_messages", "start_process"))
         try:
-            if self.is_windows:
-                activate_cmd = f"call conda activate {self.conda_env} && "
-            else:
-                activate_cmd = f"source activate {self.conda_env} && "
+            # Dynamically choose directories and method-based pipe
+            pdf_file_name = os.path.basename(self.pdf_path)
+            pdf_name_no_ext = os.path.splitext(pdf_file_name)[0]
 
-            full_cmd = activate_cmd + self.command
+            local_image_dir = os.path.join(self.output_path, pdf_name_no_ext, self.method, "images")
+            local_md_dir = os.path.join(self.output_path, pdf_name_no_ext, self.method)
 
-            if self.is_windows:
-                CREATE_NEW_PROCESS_GROUP = 0x00000200
-                self.process = subprocess.Popen(
-                    full_cmd,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    creationflags=CREATE_NEW_PROCESS_GROUP
+            os.makedirs(local_image_dir, exist_ok=True)
+            os.makedirs(local_md_dir, exist_ok=True)
+
+            image_writer = FileBasedDataWriter(local_image_dir)
+            md_writer = FileBasedDataWriter(local_md_dir)
+            reader = FileBasedDataReader("")
+
+            self.progress.emit(self.tm.get_text("process_messages", "reading_pdf"))
+            pdf_bytes = reader.read(self.pdf_path)
+
+            self.end_page = None if self.end_page == 0 else self.end_page
+
+            # Determine which pipeline to use based on method
+            if self.method == "auto":
+                pipe = UNIPipe(
+                    pdf_bytes,
+                    jso_useful_key = {
+                        '_pdf_type': '',
+                        "model_list": []
+                    },
+                    image_writer=image_writer,
+                    lang=self.lang,
+                    is_debug=self.debug,
+                    start_page_id=self.start_page,
+                    end_page_id=self.end_page
                 )
-            else:
-                self.process = subprocess.Popen(
-                    full_cmd,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    preexec_fn=os.setsid
+            elif self.method == "ocr":
+                pipe = OCRPipe(
+                    pdf_bytes,
+                    image_writer=image_writer,
+                    lang=self.lang,
+                    is_debug=self.debug,
+                    start_page_id=self.start_page,
+                    end_page_id=self.end_page
+                )
+            elif self.method == "txt":
+                pipe = TXTPipe(
+                    pdf_bytes,
+                    image_writer=image_writer,
+                    lang=self.lang,
+                    is_debug=self.debug,
+                    start_page_id=self.start_page,
+                    end_page_id=self.end_page
                 )
 
-            time.sleep(1)
-            self.child_pid = self._find_magic_pdf_process()
-            if self.child_pid:
-                self.progress.emit(self.tm.get_text("process_messages", "found_process", pid=self.child_pid))
+            self.progress.emit(self.tm.get_text("process_messages", "classifying"))
+            pipe.pipe_classify()
+            self.progress.emit(self.tm.get_text("process_messages", "analyzing"))
+            pipe.pipe_analyze()
+            self.progress.emit(self.tm.get_text("process_messages", "parsing"))
+            pipe.pipe_parse()
+            self.progress.emit(self.tm.get_text("process_messages", "making_markdown"))
+            md_content = pipe.pipe_mk_markdown(
+                os.path.basename(local_image_dir), drop_mode=DropMode.NONE, md_make_mode=MakeMode.MM_MD
+            )
+            # Write the markdown file
+            md_filename = f"{pdf_name_no_ext}.md"
+            if isinstance(md_content, list):
+                md_content_str = "\n".join(md_content)
             else:
-                self.progress.emit(self.tm.get_text("process_messages", "process_warning"))
+                md_content_str = md_content
 
-            # Main loop to read the process output
-            while True:
-                if self.should_terminate:
-                    # Process termination is now done in stop(), but we ensure here too.
-                    self._terminate_process()
-                    self.finished.emit(False, self.tm.get_text("process_messages", "user_cancel"))
-                    return
+            md_writer.write_string(md_filename, md_content_str)
 
-                if self.process.poll() is not None:
-                    break
-
-                line = self.process.stdout.readline()
-                if line:
-                    self.progress.emit(line.strip())
-                else:
-                    time.sleep(0.1)
-
-            returncode = self.process.wait()
-            if returncode == 0:
-                self.finished.emit(True, self.tm.get_text("process_messages", "process_success"))
-            else:
-                stderr_output = self.process.stderr.read()
-                if stderr_output:
-                    for err_line in stderr_output.splitlines():
-                        self.progress.emit(self.tm.get_text("process_messages", "stderr_prefix") + err_line)
-                self.finished.emit(False, self.tm.get_text("process_messages", "process_error"))
+            # If we made it this far, it's successful
+            self.finished.emit(True, self.tm.get_text("process_messages", "process_success"))
 
         except Exception as e:
+            self.progress.emit(self.tm.get_text("process_messages", "stderr_prefix") + str(e))
             self.finished.emit(False, self.tm.get_text("messages", "process_error", msg=str(e)))
         finally:
-            self._cleanup()
+            # Clean up logging handlers
+            self._cleanup_logging()
 
-    def stop(self):
-        # Immediately signal that termination is requested
-        self.should_terminate = True
-        # Immediately attempt to terminate the process to make cancel behavior stronger
-        self._terminate_process()
-
-    def _terminate_process(self):
-        try:
-            import psutil
-            if self.child_pid:
-                try:
-                    # Get process and all children
-                    parent = psutil.Process(self.child_pid)
-                    children = parent.children(recursive=True)
-
-                    # Kill all child processes first
-                    for child in children:
-                        try:
-                            child.kill()
-                        except psutil.NoSuchProcess:
-                            pass
-
-                    # Kill parent process
-                    parent.kill()
-
-                except psutil.NoSuchProcess:
-                    self.progress.emit(self.tm.get_text("process_messages", "already_terminated"))
-                except Exception as e:
-                    self.progress.emit(self.tm.get_text("process_messages", "termination_error", error=str(e)))
-
-            # Kill the shell process if it still exists
-            if self.process and self.process.poll() is None:
-                self.process.kill()
-
-        except ImportError:
-            self.progress.emit(self.tm.get_text("process_messages", "psutil_missing"))
-            if self.child_pid:
-                try:
-                    if self.is_windows:
-                        subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.child_pid)],
-                                     capture_output=True)
-                    else:
-                        os.killpg(os.getpgid(self.child_pid), signal.SIGKILL)
-                except Exception as e:
-                    self.progress.emit(self.tm.get_text("process_messages", "fallback_error", error=str(e)))
-
-    def _cleanup(self):
-        if self.process:
-            try:
-                self.process.stdout.close()
-                self.process.stderr.close()
-            except:
-                pass
 
 class MinerUGUI(QMainWindow):
     def __init__(self):
@@ -378,19 +386,12 @@ class MinerUGUI(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        cmd = f'magic-pdf -p "{self.input_path.text()}" -o "{self.output_path.text()}" -m {self.method_combo.currentText()}'
-
-        if self.lang_input.text():
-            cmd += f' -l {self.lang_input.text()}'
-
-        if self.start_page.value() > 0:
-            cmd += f' -s {self.start_page.value()}'
-
-        if self.end_page.value() > 0:
-            cmd += f' -e {self.end_page.value()}'
-
-        if self.debug_check.isChecked():
-            cmd += ' -d True'
+        pdf_path = self.input_path.text()
+        method = self.method_combo.currentText()
+        lang = self.lang_input.text().strip()
+        start_page = self.start_page.value()
+        end_page = self.end_page.value()
+        debug = self.debug_check.isChecked()
 
         self.process_btn.setEnabled(False)
         self.cancel_btn.setEnabled(True)
@@ -399,16 +400,37 @@ class MinerUGUI(QMainWindow):
         self.output_log.clear()
         self.cancel_requested = False
 
-        self.runner = CommandRunner(self.conda_env, cmd)
+        # Pass parameters directly to CommandRunner
+        self.runner = CommandRunner(pdf_path, output_dir, method, lang, start_page, end_page, debug)
         self.runner.progress.connect(self.update_progress)
         self.runner.finished.connect(self.process_finished)
         self.runner.start()
 
     def cancel_process(self):
         if hasattr(self, 'runner') and self.runner.isRunning():
-            self.cancel_requested = True
-            self.runner.stop()
-            self.status_label.setText(self.tm.get_text("status", "cancelling"))
+            pdf_name = os.path.splitext(os.path.basename(self.input_path.text()))[0]
+            output_dir = self.output_path.text()
+            md_dir = os.path.join(output_dir, pdf_name)
+            if os.path.exists(md_dir):
+                reply = QMessageBox.question(
+                    self,
+                    self.tm.get_text("messages", "cancel_title"),
+                    self.tm.get_text("messages", "cancel_message", md_dir=md_dir),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    try:
+                        shutil.rmtree(md_dir)
+                        self.output_log.appendPlainText(
+                            self.tm.get_text("messages", "cleanup_dir", dir=md_dir)
+                        )
+                    except Exception as e:
+                        self.output_log.appendPlainText(
+                            self.tm.get_text("messages", "cleanup_error", dir=md_dir, error=str(e))
+                        )
+            self.output_log.appendPlainText(self.tm.get_text("process_messages", "user_cancelled"))
+            self.close()
 
     def update_progress(self, message):
         self.output_log.appendPlainText(message)
@@ -437,40 +459,17 @@ class MinerUGUI(QMainWindow):
                     self.tm.get_text("messages", "preview_error", error=str(e))
                 )
         else:
-            if self.cancel_requested:
-                self.status_label.setText(self.tm.get_text("status", "cancelled"))
-                self.output_log.appendPlainText(
-                    self.tm.get_text("messages", "cancel_success")
-                )
-                # Ask user about cleanup
-                pdf_name = os.path.splitext(os.path.basename(self.input_path.text()))[0]
-                output_dir = self.output_path.text()
-                md_dir = os.path.join(output_dir, pdf_name)
-                if os.path.exists(md_dir):
-                    reply = QMessageBox.question(
-                        self,
-                        self.tm.get_text("messages", "cancel_title"),
-                        self.tm.get_text("messages", "cancel_message", md_dir=md_dir),
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.Yes
-                    )
-                    if reply == QMessageBox.StandardButton.Yes:
-                        try:
-                            shutil.rmtree(md_dir)
-                            self.output_log.appendPlainText(
-                                self.tm.get_text("messages", "cleanup_dir", dir=md_dir)
-                            )
-                        except Exception as e:
-                            self.output_log.appendPlainText(
-                                self.tm.get_text("messages", "cleanup_error", dir=md_dir, error=str(e))
-                            )
-            else:
-                self.status_label.setText("Error: " + message)
+            self.status_label.setText("Error: " + message)
+
 def main():
     app = QApplication(sys.argv)
-    window = MinerUGUI()
-    window.show()
-    sys.exit(app.exec())
+    try:
+        window = MinerUGUI()
+        window.show()
+        return app.exec()
+    except Exception as e:
+        print(f"Error initializing application: {e}")
+        return 1
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

@@ -120,10 +120,6 @@
             "en": "Do you want to remove the partially processed directory?\n{md_dir}",
             "zh": "是否删除部分处理的目录？\n{md_dir}"
         },
-        "remove_error": {
-            "en": "Failed to remove existing directory '{dir}'. {error}",
-            "zh": "无法删除现有目录 '{dir}'。{error}"
-        },
         "process_error": {
             "en": "Error: {msg}",
             "zh": "错误: {msg}"
@@ -143,52 +139,48 @@
         "successful_md_path": {
             "en": "PDF conversion successful:\n{md_path}",
             "zh": "PDF转换成功：\n{md_path}"
+        },
+        "preview_error": {
+            "en": "Failed to load preview: {error}",
+            "zh": "加载预览失败：{error}"
         }
     },
     "process_messages": {
-        "find_process_error": {
-            "en": "Error finding magic-pdf process: {error}",
-            "zh": "查找magic-pdf进程时出错：{error}"
+        "start_process": {
+            "en": "PDF conversion has started",
+            "zh": "PDF转换已开始"
         },
-        "found_process": {
-            "en": "PDF conversion has started - PID:{pid}",
-            "zh": "PDF转换已开始 - PID:{pid}"
+        "reading_pdf": {
+            "en": "Reading PDF file",
+            "zh": "正在读取PDF文件"
         },
-        "process_warning": {
-            "en": "Warning: Could not find magic-pdf process",
-            "zh": "警告：无法找到magic-pdf进程"
+        "classifying": {
+            "en": "Classifying document structure",
+            "zh": "正在分析文档结构"
         },
-        "user_cancel": {
-            "en": "PDF conversion cancelled by user!",
-            "zh": "PDF转换已被用户取消"
+        "analyzing": {
+            "en": "Analyzing content",
+            "zh": "正在分析内容"
+        },
+        "parsing": {
+            "en": "Parsing document",
+            "zh": "正在解析文档"
+        },
+        "making_markdown": {
+            "en": "Converting to Markdown",
+            "zh": "正在转换为Markdown"
         },
         "process_success": {
-            "en": "Success!",
-            "zh": "处理成功！"
+            "en": "Processing completed successfully",
+            "zh": "处理成功完成"
         },
         "stderr_prefix": {
-            "en": "[stderr]: ",
-            "zh": "[错误输出]: "
+            "en": "[Error]: ",
+            "zh": "[错误]: "
         },
-        "process_error": {
-            "en": "Error encountered. See log for details.",
-            "zh": "遇到错误。请查看日志了解详情。"
-        },
-        "already_terminated": {
-            "en": "Process already terminated",
-            "zh": "进程已终止"
-        },
-        "termination_error": {
-            "en": "Error terminating magic-pdf process: {error}",
-            "zh": "终止magic-pdf进程时出错：{error}"
-        },
-        "psutil_missing": {
-            "en": "psutil not installed. Using fallback termination method.",
-            "zh": "未安装psutil。使用备用终止方法。"
-        },
-        "fallback_error": {
-            "en": "Error in fallback termination: {error}",
-            "zh": "备用终止方法出错：{error}"
+        "user_cancelled": {
+            "en": "PDF conversion cancelled by user!",
+            "zh": "PDF转换已被用户取消"
         }
     }
 }
