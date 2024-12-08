@@ -112,13 +112,21 @@
             "en": "Output directory '{dir}' already exists and may contain previous results.\nDo you want to overwrite it?",
             "zh": "输出目录 '{dir}' 已存在且可能包含之前的结果。\n是否要覆盖它？"
         },
-        "cancel_title": {
+        "cancel_confirmation_title": {
+            "en": "Cancel Confirmation",
+            "zh": "确认取消"
+        },
+        "cancel_confirmation_message": {
+            "en": "Cancel the process will stop the program",
+            "zh": "取消进程将停止程序"
+        },
+        "cancel_cleanup_title": {
             "en": "Cleanup Directory",
             "zh": "清理目录"
         },
-        "cancel_message": {
-            "en": "Do you want to remove the partially processed directory?\n{md_dir}",
-            "zh": "是否删除部分处理的目录？\n{md_dir}"
+        "cancel_cleanup_message": {
+            "en": "Do you want to remove the partially processed directory?\n{dir}",
+            "zh": "是否删除部分处理的目录？\n{dir}"
         },
         "process_error": {
             "en": "Error: {msg}",
