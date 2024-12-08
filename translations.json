@@ -141,8 +141,8 @@
             "zh": "无法删除目录 {dir}：{error}"
         },
         "successful_md_path": {
-            "en": "PDF conversion successful: {md_path}",
-            "zh": "PDF转换成功：{md_path}"
+            "en": "PDF conversion successful:\n{md_path}",
+            "zh": "PDF转换成功：\n{md_path}"
         }
     },
     "process_messages": {
