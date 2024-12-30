@@ -1,5 +1,4 @@
-magic-pdf[full] --extra-index-url https://wheels.myhloli.com
-psutil
+magic-pdf[full]>=0.10.6 --extra-index-url https://wheels.myhloli.com
 huggingface_hub
 PyQt6
 loguru

@@ -18,6 +18,7 @@ from magic_pdf.config.make_content_config import DropMode, MakeMode
 from magic_pdf.pipe.UNIPipe import UNIPipe
 from magic_pdf.pipe.OCRPipe import OCRPipe
 from magic_pdf.pipe.TXTPipe import TXTPipe
+from magic_pdf.data.dataset import PymuDocDataset
 
 from loguru import logger
 from detectron2.utils.logger import setup_logger
@@ -145,22 +146,21 @@ class CommandRunner(QThread):
             pdf_file_name = os.path.basename(self.pdf_path)
             pdf_name_no_ext = os.path.splitext(pdf_file_name)[0]
 
-            local_image_dir = os.path.join(self.output_path, pdf_name_no_ext, self.method, "images")
             local_md_dir = os.path.join(self.output_path, pdf_name_no_ext, self.method)
-
-            os.makedirs(local_image_dir, exist_ok=True)
             os.makedirs(local_md_dir, exist_ok=True)
 
-            image_writer = FileBasedDataWriter(local_image_dir)
             md_writer = FileBasedDataWriter(local_md_dir)
             reader = FileBasedDataReader("")
 
             self.progress.emit(self.tm.get_text("process_messages", "reading_pdf"))
             pdf_bytes = reader.read(self.pdf_path)
 
+            dataset = PymuDocDataset(pdf_bytes)
+            print(dataset, type(dataset))
+
             self.end_page = None if self.end_page == 0 else self.end_page
 
-            pipe = self._initialize_pipeline(pdf_bytes)
+            pipe = self._initialize_pipeline(dataset)
 
             self.progress.emit(self.tm.get_text("process_messages", "classifying"))
             pipe.pipe_classify()
@@ -170,7 +170,9 @@ class CommandRunner(QThread):
             pipe.pipe_parse()
             self.progress.emit(self.tm.get_text("process_messages", "making_markdown"))
             md_content = pipe.pipe_mk_markdown(
-                os.path.basename(local_image_dir), drop_mode=DropMode.NONE, md_make_mode=MakeMode.MM_MD
+                os.path.basename(os.path.join(self.output_path, pdf_name_no_ext, self.method, "images")),
+                drop_mode=DropMode.NONE,
+                md_make_mode=MakeMode.MM_MD
             )
 
             self._write_markdown(md_writer, pdf_name_no_ext, md_content)
@@ -183,10 +185,11 @@ class CommandRunner(QThread):
         finally:
             self._cleanup_logging()
 
-    def _initialize_pipeline(self, pdf_bytes):
+    def _initialize_pipeline(self, dataset):
         if self.method == "auto":
+            print(dataset, type(dataset))
             return UNIPipe(
-                pdf_bytes,
+                dataset,
                 jso_useful_key={
                     '_pdf_type': '',
                     "model_list": []
@@ -199,7 +202,7 @@ class CommandRunner(QThread):
             )
         elif self.method == "ocr":
             return OCRPipe(
-                pdf_bytes,
+                dataset,
                 image_writer=FileBasedDataWriter(os.path.join(self.output_path, os.path.splitext(os.path.basename(self.pdf_path))[0], self.method, "images")),
                 lang=self.lang,
                 is_debug=self.debug,
@@ -208,7 +211,7 @@ class CommandRunner(QThread):
             )
         elif self.method == "txt":
             return TXTPipe(
-                pdf_bytes,
+                dataset,
                 image_writer=FileBasedDataWriter(os.path.join(self.output_path, os.path.splitext(os.path.basename(self.pdf_path))[0], self.method, "images")),
                 lang=self.lang,
                 is_debug=self.debug,
