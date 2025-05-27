@@ -1,27 +1,22 @@
-#!/usr/bin/env python3
-
-import sys
-import os
 import json
-import shutil
 import logging
+import os
+import shutil
+import sys
 
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QComboBox, QSpinBox,
-    QCheckBox, QLineEdit, QProgressBar, QMessageBox, QPlainTextEdit
-)
-from PyQt6.QtCore import QThread, QLocale, pyqtSignal
-
-from magic_pdf.data.data_reader_writer import FileBasedDataWriter, FileBasedDataReader
-from magic_pdf.config.make_content_config import DropMode, MakeMode
-from magic_pdf.pipe.UNIPipe import UNIPipe
-from magic_pdf.pipe.OCRPipe import OCRPipe
-from magic_pdf.pipe.TXTPipe import TXTPipe
-from magic_pdf.data.dataset import PymuDocDataset
-
+# from detectron2.utils.logger import setup_logger
 from loguru import logger
-from detectron2.utils.logger import setup_logger
+from magic_pdf.config.enums import SupportedPdfParseMethod
+from magic_pdf.config.make_content_config import DropMode, MakeMode
+from magic_pdf.data.data_reader_writer import (FileBasedDataReader,
+                                               FileBasedDataWriter)
+from magic_pdf.data.dataset import PymuDocDataset
+from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
+from PyQt6.QtCore import QLocale, QThread, pyqtSignal
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog,
+                             QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+                             QMessageBox, QPlainTextEdit, QProgressBar,
+                             QPushButton, QSpinBox, QVBoxLayout, QWidget)
 
 
 class TranslationManager:
@@ -42,7 +37,7 @@ class TranslationManager:
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             translation_file = os.path.join(script_dir, "translations.json")
-            with open(translation_file, 'r', encoding='utf-8') as f:
+            with open(translation_file, "r", encoding="utf-8") as f:
                 self.translations = json.load(f)
         except Exception as e:
             print(f"Error loading translations: {e}")
@@ -54,7 +49,11 @@ class TranslationManager:
 
     def get_text(self, category, key, **kwargs):
         try:
-            text = self.translations.get(category, {}).get(key, {}).get(self.current_language, f"{category}.{key}")
+            text = (
+                self.translations.get(category, {})
+                .get(key, {})
+                .get(self.current_language, f"{category}.{key}")
+            )
             return text.format(**kwargs) if kwargs else text
         except Exception as e:
             print(f"Translation error for {category}.{key}: {e}")
@@ -63,6 +62,7 @@ class TranslationManager:
 
 class SignalHandler(logging.Handler):
     """Custom handler to forward standard logging messages to Qt signal"""
+
     def __init__(self, signal_callback):
         super().__init__()
         self.signal_callback = signal_callback
@@ -79,7 +79,16 @@ class CommandRunner(QThread):
     finished = pyqtSignal(bool, str)
     progress = pyqtSignal(str)
 
-    def __init__(self, pdf_path, output_path, method, lang, start_page, end_page, debug):
+    def __init__(
+        self,
+        pdf_path,
+        output_path,
+        method,
+        lang,
+        start_page,
+        end_page,
+        debug,
+    ):
         super().__init__()
         self.pdf_path = pdf_path
         self.output_path = output_path
@@ -101,7 +110,7 @@ class CommandRunner(QThread):
 
         # Standard logging handler
         self.log_handler = SignalHandler(self._log_sink)
-        self.log_handler.setFormatter(logging.Formatter('%(message)s'))
+        self.log_handler.setFormatter(logging.Formatter("%(message)s"))
         self.log_handler.setLevel(logging.INFO)
         root_logger = logging.getLogger()
         self.original_log_level = root_logger.getEffectiveLevel()
@@ -109,17 +118,17 @@ class CommandRunner(QThread):
         root_logger.setLevel(logging.INFO)
 
         # Detectron2 logger setup
-        self.detectron_logger = setup_logger(
-            output=None,  # No file output needed
-            distributed_rank=0,
-            name="detectron2",
-            color=False  # Disable colors for GUI output
-        )
-        self.detectron_logger.addHandler(self.log_handler)
+        # self.detectron_logger = setup_logger(
+        #     output=None,  # No file output needed
+        #     distributed_rank=0,
+        #     name="detectron2",
+        #     color=False,  # Disable colors for GUI output
+        # )
+        # self.detectron_logger.addHandler(self.log_handler)
 
     def _log_sink(self, message):
         """Common sink for both loguru and standard logging"""
-        if hasattr(message, 'record'):
+        if hasattr(message, "record"):
             self.progress.emit(message.record["message"])
         else:
             self.progress.emit(str(message))
@@ -152,6 +161,10 @@ class CommandRunner(QThread):
             md_writer = FileBasedDataWriter(local_md_dir)
             reader = FileBasedDataReader("")
 
+            output_image_path = os.path.join(local_md_dir, "images")
+            os.makedirs(output_image_path, exist_ok=True)
+            image_writer = FileBasedDataWriter(output_image_path)
+
             self.progress.emit(self.tm.get_text("process_messages", "reading_pdf"))
             pdf_bytes = reader.read(self.pdf_path)
 
@@ -160,70 +173,78 @@ class CommandRunner(QThread):
 
             self.end_page = None if self.end_page == 0 else self.end_page
 
-            pipe = self._initialize_pipeline(dataset)
+            infer_result, pipe_result = self._inference(dataset, image_writer)
 
-            self.progress.emit(self.tm.get_text("process_messages", "classifying"))
-            pipe.pipe_classify()
-            self.progress.emit(self.tm.get_text("process_messages", "analyzing"))
-            pipe.pipe_analyze()
-            self.progress.emit(self.tm.get_text("process_messages", "parsing"))
-            pipe.pipe_parse()
-            self.progress.emit(self.tm.get_text("process_messages", "making_markdown"))
-            md_content = pipe.pipe_mk_markdown(
-                os.path.basename(os.path.join(self.output_path, pdf_name_no_ext, self.method, "images")),
-                drop_mode=DropMode.NONE,
-                md_make_mode=MakeMode.MM_MD
+            ### draw model result on each page
+            infer_result.draw_model(os.path.join(local_md_dir, f"{pdf_name_no_ext}_model.pdf"))
+
+            ### get model inference result
+            model_inference_result = infer_result.get_infer_res()
+
+            ### draw layout result on each page
+            pipe_result.draw_layout(os.path.join(local_md_dir, f"{pdf_name_no_ext}_layout.pdf"))
+
+            ### draw spans result on each page
+            pipe_result.draw_span(os.path.join(local_md_dir, f"{pdf_name_no_ext}_spans.pdf"))
+
+            ### get markdown content
+            md_content = pipe_result.get_markdown(output_image_path)
+
+            ### dump markdown
+            pipe_result.dump_md(md_writer, f"{local_md_dir}.md", output_image_path)
+
+            ### get content list content
+            content_list_content = pipe_result.get_content_list(output_image_path)
+
+            ### dump content list
+            pipe_result.dump_content_list(
+                md_writer, f"{pdf_name_no_ext}_content_list.json", output_image_path
             )
 
-            self._write_markdown(md_writer, pdf_name_no_ext, md_content)
+            ### get middle json
+            middle_json_content = pipe_result.get_middle_json()
 
-            self.finished.emit(True, self.tm.get_text("process_messages", "process_success"))
+            ### dump middle json
+            pipe_result.dump_middle_json(md_writer, f"{pdf_name_no_ext}_middle.json")
+
+            self.finished.emit(
+                True, self.tm.get_text("process_messages", "process_success")
+            )
 
         except Exception as e:
-            self.progress.emit(f"{self.tm.get_text('process_messages', 'stderr_prefix')}{str(e)}")
-            self.finished.emit(False, self.tm.get_text("messages", "process_error", msg=str(e)))
+            self.progress.emit(
+                f"{self.tm.get_text('process_messages', 'stderr_prefix')}{str(e)}"
+            )
+            self.finished.emit(
+                False, self.tm.get_text("messages", "process_error", msg=str(e))
+            )
         finally:
             self._cleanup_logging()
 
-    def _initialize_pipeline(self, dataset):
-        if self.method == "auto":
-            print(dataset, type(dataset))
-            return UNIPipe(
-                dataset,
-                jso_useful_key={
-                    '_pdf_type': '',
-                    "model_list": []
-                },
-                image_writer=FileBasedDataWriter(os.path.join(self.output_path, os.path.splitext(os.path.basename(self.pdf_path))[0], self.method, "images")),
-                lang=self.lang,
-                is_debug=self.debug,
+    def _inference(self, dataset, image_writer):
+        use_ocr = (
+            self.method == "ocr" or dataset.classify() == SupportedPdfParseMethod.OCR
+        )
+        infer_result = dataset.apply(doc_analyze, ocr=use_ocr)
+        if use_ocr:
+            pipe_result = infer_result.pipe_ocr_mode(
+                image_writer,
                 start_page_id=self.start_page,
-                end_page_id=self.end_page
-            )
-        elif self.method == "ocr":
-            return OCRPipe(
-                dataset,
-                image_writer=FileBasedDataWriter(os.path.join(self.output_path, os.path.splitext(os.path.basename(self.pdf_path))[0], self.method, "images")),
-                lang=self.lang,
-                is_debug=self.debug,
-                start_page_id=self.start_page,
-                end_page_id=self.end_page
-            )
-        elif self.method == "txt":
-            return TXTPipe(
-                dataset,
-                image_writer=FileBasedDataWriter(os.path.join(self.output_path, os.path.splitext(os.path.basename(self.pdf_path))[0], self.method, "images")),
-                lang=self.lang,
-                is_debug=self.debug,
-                start_page_id=self.start_page,
-                end_page_id=self.end_page
+                end_page_id=self.end_page,
             )
         else:
-            raise ValueError(f"Unknown method: {self.method}")
+            pipe_result = infer_result.pipe_txt_mode(
+                image_writer,
+                start_page_id=self.start_page,
+                end_page_id=self.end_page,
+            )
+        return infer_result, pipe_result
 
     def _write_markdown(self, md_writer, pdf_name_no_ext, md_content):
         md_filename = f"{pdf_name_no_ext}.md"
-        md_content_str = "\n".join(md_content) if isinstance(md_content, list) else md_content
+        md_content_str = (
+            "\n".join(md_content) if isinstance(md_content, list) else md_content
+        )
         md_writer.write_string(md_filename, md_content_str)
 
 
@@ -276,7 +297,7 @@ class MinerUGUI(QMainWindow):
         # Method selection
         method_layout = QHBoxLayout()
         self.method_combo = QComboBox()
-        self.method_combo.addItems(['auto', 'ocr', 'txt'])
+        self.method_combo.addItems(["auto", "ocr", "txt"])
         method_layout.addWidget(QLabel(self.tm.get_text("labels", "method")))
         method_layout.addWidget(self.method_combo)
         left_layout.addLayout(method_layout)
@@ -284,7 +305,9 @@ class MinerUGUI(QMainWindow):
         # Language selection
         lang_layout = QHBoxLayout()
         self.lang_input = QLineEdit()
-        self.lang_input.setPlaceholderText(self.tm.get_text("placeholders", "language_input"))
+        self.lang_input.setPlaceholderText(
+            self.tm.get_text("placeholders", "language_input")
+        )
         lang_layout.addWidget(QLabel(self.tm.get_text("labels", "language")))
         lang_layout.addWidget(self.lang_input)
         left_layout.addLayout(lang_layout)
@@ -335,7 +358,6 @@ class MinerUGUI(QMainWindow):
         btn_layout.addWidget(self.cancel_btn)
         left_layout.addLayout(btn_layout)
 
-
         # Right panel for markdown preview (hidden initially)
         self.preview_panel = QPlainTextEdit()
         self.preview_panel.setReadOnly(True)
@@ -355,7 +377,7 @@ class MinerUGUI(QMainWindow):
             self,
             self.tm.get_text("dialogs", "select_pdf"),
             "",
-            self.tm.get_text("dialogs", "pdf_filter")
+            self.tm.get_text("dialogs", "pdf_filter"),
         )
         if path:
             self.input_path.setText(path)
@@ -363,8 +385,7 @@ class MinerUGUI(QMainWindow):
 
     def select_output(self):
         path = QFileDialog.getExistingDirectory(
-            self,
-            self.tm.get_text("dialogs", "select_output_dir")
+            self, self.tm.get_text("dialogs", "select_output_dir")
         )
         if path:
             self.output_path.setText(path)
@@ -380,7 +401,7 @@ class MinerUGUI(QMainWindow):
             QMessageBox.warning(
                 self,
                 self.tm.get_text("messages", "error"),
-                self.tm.get_text("messages", "select_paths")
+                self.tm.get_text("messages", "select_paths"),
             )
             return
 
@@ -401,7 +422,9 @@ class MinerUGUI(QMainWindow):
 
         self._start_processing()
 
-        self.runner = CommandRunner(pdf_path, output_dir, method, lang, start_page, end_page, debug)
+        self.runner = CommandRunner(
+            pdf_path, output_dir, method, lang, start_page, end_page, debug
+        )
         self.runner.progress.connect(self.update_progress)
         self.runner.finished.connect(self.process_finished)
         self.runner.start()
@@ -415,7 +438,7 @@ class MinerUGUI(QMainWindow):
             self.tm.get_text("messages", "overwrite_title"),
             self.tm.get_text("messages", "overwrite_message", dir=directory),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
+            QMessageBox.StandardButton.Yes,
         )
         return reply == QMessageBox.StandardButton.Yes
 
@@ -428,14 +451,14 @@ class MinerUGUI(QMainWindow):
         self.cancel_requested = False
 
     def cancel_process(self):
-        if hasattr(self, 'runner') and self.runner.isRunning():
+        if hasattr(self, "runner") and self.runner.isRunning():
             # Confirmation to cancel and stop the program
             confirm_reply = QMessageBox.question(
                 self,
                 self.tm.get_text("messages", "cancel_confirmation_title"),
                 self.tm.get_text("messages", "cancel_confirmation_message"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
+                QMessageBox.StandardButton.Yes,
             )
 
             if confirm_reply != QMessageBox.StandardButton.Yes:
@@ -451,7 +474,7 @@ class MinerUGUI(QMainWindow):
                     self.tm.get_text("messages", "cancel_cleanup_title"),
                     self.tm.get_text("messages", "cancel_cleanup_message", dir=md_dir),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
+                    QMessageBox.StandardButton.Yes,
                 )
                 if reply == QMessageBox.StandardButton.Yes:
                     try:
@@ -461,10 +484,14 @@ class MinerUGUI(QMainWindow):
                         )
                     except Exception as e:
                         self.output_log.appendPlainText(
-                            self.tm.get_text("messages", "cleanup_error", dir=md_dir, error=str(e))
+                            self.tm.get_text(
+                                "messages", "cleanup_error", dir=md_dir, error=str(e)
+                            )
                         )
 
-            self.output_log.appendPlainText(self.tm.get_text("process_messages", "user_cancelled"))
+            self.output_log.appendPlainText(
+                self.tm.get_text("process_messages", "user_cancelled")
+            )
             self.close()
 
     def update_progress(self, message):
@@ -478,14 +505,19 @@ class MinerUGUI(QMainWindow):
         if success:
             self.status_label.setText(self.tm.get_text("status", "success"))
             pdf_name = os.path.splitext(os.path.basename(self.input_path.text()))[0]
-            md_path = os.path.join(self.output_path.text(), pdf_name, self.method_combo.currentText(), pdf_name + ".md")
+            md_path = os.path.join(
+                self.output_path.text(),
+                pdf_name,
+                self.method_combo.currentText(),
+                pdf_name + ".md",
+            )
             self.output_log.appendPlainText(
                 self.tm.get_text("messages", "successful_md_path", md_path=md_path)
             )
             # Show markdown preview after successful conversion
             try:
                 if os.path.exists(md_path):
-                    with open(md_path, 'r', encoding='utf-8') as f:
+                    with open(md_path, "r", encoding="utf-8") as f:
                         markdown_content = f.read()
                         self.preview_panel.setPlainText(markdown_content)
                         self.preview_panel.show()  # Show the preview panel
@@ -496,6 +528,7 @@ class MinerUGUI(QMainWindow):
         else:
             self.status_label.setText("Error: " + message)
 
+
 def main():
     app = QApplication(sys.argv)
     window = MinerUGUI()
@@ -503,5 +536,5 @@ def main():
     sys.exit(app.exec())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
