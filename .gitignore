@@ -1,1 +1,118 @@
-/download_models_hf.py
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Virtual environment
+# 常见的虚拟环境目录名称
+.venv/
+venv/
+env/
+.env/
+# Pipenv 创建的虚拟环境目录 (如果不在项目根目录)
+# 更多信息请查看 Pipenv 文档：https://pipenv.pypa.io/en/latest/
+__pypackages__/
+
+# C extensions / compiled files (e.g., from Cython or CFFI)
+*.so
+*.dylib
+*.dll
+*.o
+
+# Distribution / packaging
+# 打包和分发文件
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+*.manifest
+*.spec # PyInstaller spec file (通常会提交，但如果你是自动生成或者不希望跟踪，可以忽略)
+# Windows installers often create a `.Python` directory
+.Python/
+
+# MyPy (static type checker)
+.mypy_cache/
+
+# Unit test / coverage
+# 单元测试和代码覆盖率报告
+.pytest_cache/
+.coverage
+htmlcov/ # HTML 覆盖率报告
+.tox/ # Tox 测试环境
+nosetests.xml
+coverage.xml
+.coveragerc # 覆盖率配置文件 (通常会提交，但如果包含本地路径或敏感信息，可以忽略)
+.benchmarks/ # Pytest benchmark outputs
+
+# Jupyter Notebook
+# Jupyter Notebook 检查点文件
+.ipynb_checkpoints/
+
+# IDEs and Editors
+# 各种 IDE 和编辑器的配置文件/缓存
+.idea/  # JetBrains IDEs (PyCharm, IntelliJ, WebStorm)
+.vscode/ # VS Code (通常会提交 launch.json 和 tasks.json，但可以忽略用户设置和缓存)
+# .vscode/settings.json # 如果是项目级别的设置，可以提交；如果是用户个人设置，可以忽略。
+# .vscode/launch.json # 如果是项目级别的调试配置，可以提交。
+# .vscode/tasks.json # 如果是项目级别的任务配置，可以提交。
+.vscode/*.log
+.vscode/*.db
+.vscode/extensions.json # 建议提交，用于推荐项目所需扩展
+.vscode/settings.json # 建议提交，用于项目级别的设置
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp  # Swap files
+*.swo  # Swap files
+
+# Emacs
+*~     # Backup files
+\#*#   # Backup files
+.#*    # Auto-save files
+
+# OS generated files
+.DS_Store           # macOS
+Thumbs.db           # Windows
+ehthumbs.db         # Windows
+Desktop.ini         # Windows
+
+# Logs and databases
+# 日志文件和本地数据库文件
+*.log
+*.sqlite3
+*.db
+# 如果有专门的日志或数据目录
+logs/
+data/ # 注意：如果 `data/` 包含小型的、需要版本控制的数据集，请从这里移除
+results/ # 同样，如果结果文件需要版本控制，请从这里移除
+
+# Local configuration / credentials
+# 本地配置文件和敏感凭据
+.env                # 环境变量文件
+*.env               # 其他 .env 文件
+config.local.py     # 本地开发配置 (例如，数据库连接字符串)
+# 你可能需要忽略包含敏感信息的配置文件，例如：
+# settings_local.py
+# .secrets
+# *.ini # 小心忽略 .ini 文件，有些可能是项目配置，应该提交
+# *.yaml # 小心忽略 .yaml 文件，有些可能是项目配置，应该提交
+# *.json # 小心忽略 .json 文件，有些可能是项目配置，应该提交
+
+# Security (private keys, certificates)
+*.pem
+*.key
+*.crt
+*.pfx
+
+# Miscellaneous
+# 其他临时文件或备份
+*.bak
+*.tmp
+*.sample # 示例配置文件通常会提交，但如果你想忽略它们，可以添加此行
+test*
+output/
